@@ -27,6 +27,18 @@ QtFirebaseMessaging::QtFirebaseMessaging(QObject* parent)
         qDebug() << self << "::QtFirebaseMessaging" << "singleton";
     }
 
+#ifdef Q_OS_ANDROID
+    connect(qApp, &QGuiApplication::applicationStateChanged, qApp, [this] (Qt::ApplicationState state) {
+        qInfo() << "App state changed:" << qApp->applicationState();
+        if (state == Qt::ApplicationActive) {
+            ::messaging::Terminate();
+            _ready = false;
+            _initializing = false;
+            QTimer::singleShot(100, this, &QtFirebaseMessaging::init);
+        }
+    });
+#endif
+
     if(qFirebase->ready()) {
         //Call init outside of constructor, otherwise signal readyChanged not emited
         QTimer::singleShot(100, this, &QtFirebaseMessaging::init);
