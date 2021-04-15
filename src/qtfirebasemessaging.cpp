@@ -27,18 +27,6 @@ QtFirebaseMessaging::QtFirebaseMessaging(QObject* parent)
         qDebug() << self << "::QtFirebaseMessaging" << "singleton";
     }
 
-#ifdef Q_OS_ANDROID
-    connect(qApp, &QGuiApplication::applicationStateChanged, qApp, [this] (Qt::ApplicationState state) {
-        qInfo() << "App state changed:" << qApp->applicationState();
-        if (state == Qt::ApplicationActive) {
-            ::messaging::Terminate();
-            _ready = false;
-            _initializing = false;
-            QTimer::singleShot(100, this, &QtFirebaseMessaging::init);
-        }
-    });
-#endif
-
     if(qFirebase->ready()) {
         //Call init outside of constructor, otherwise signal readyChanged not emited
         QTimer::singleShot(100, this, &QtFirebaseMessaging::init);
@@ -89,6 +77,28 @@ void QtFirebaseMessaging::init()
         _initializing = false;
         setReady(true);
     }
+
+#ifdef Q_OS_ANDROID
+    static bool connectionDone = false;
+    static bool appAlreadyBackgrounded = false;
+    if (!connectionDone) {
+        connectionDone = true;
+        connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] (Qt::ApplicationState state) {
+            qDebug() << "App state changed:" << qApp->applicationState();
+            if (state == Qt::ApplicationSuspended) {
+                appAlreadyBackgrounded = true;
+                return;
+            }
+
+            if (state == Qt::ApplicationActive && appAlreadyBackgrounded) {
+                qInfo() << "Reinit firebase messaging to trigger notification";
+                ::messaging::Terminate();
+                ::messaging::Initialize(*qFirebase->firebaseApp(), g_listener);
+                return;
+            }
+        });
+    }
+#endif
 }
 
 void QtFirebaseMessaging::onFutureEvent(const QString &eventId, const firebase::FutureBase &future)
